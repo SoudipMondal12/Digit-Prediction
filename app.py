@@ -1,15 +1,15 @@
 import streamlit as st
-import tensorflow as tf
+import onnxruntime as ort
 import numpy as np
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
-# Load model
+# Load ONNX model
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model("digit_prediction_mlp_model.h5")
+    return ort.InferenceSession("mnist_model.onnx")
 
-model = load_model()
+session = load_model()
 
 # UI
 st.title("✍️ Handwritten Digit Recognizer")
@@ -29,22 +29,24 @@ canvas = st_canvas(
 
 if st.button("Predict"):
     if canvas.image_data is not None:
-        # Process the drawn image
+        # Process image
         img = Image.fromarray(canvas.image_data.astype("uint8"))
-        img = img.convert("L")                   # grayscale
-        img = img.resize((28, 28))               # resize to MNIST size
-        img_array = np.array(img) / 255.0        # normalize
+        img = img.convert("L")           # grayscale
+        img = img.resize((28, 28))       # resize to MNIST size
+        img_array = np.array(img, dtype=np.float32) / 255.0
         img_array = img_array.flatten().reshape(1, 784)
 
-        # Predict
-        prediction = model.predict(img_array)
+        # Predict using ONNX
+        input_name = session.get_inputs()[0].name
+        prediction = session.run(None, {input_name: img_array})[0]
+
         digit = np.argmax(prediction)
         confidence = np.max(prediction)
 
         st.success(f"Predicted Digit: **{digit}**")
         st.write(f"Confidence: **{confidence:.2%}**")
 
-        # Show confidence bar chart for all digits
+        # Bar chart
         st.bar_chart({str(i): float(prediction[0][i]) for i in range(10)})
     else:
         st.warning("Please draw a digit first!")
